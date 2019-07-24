@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project name="ConcurrentSystem" default="00_RMA" basedir=".">
+
+	<property name="src" value="./src" />
+	<property name="classes" value="./bin" />
+	<property name="jade_lib" value="../lib" /> <!-- Path for jade.jar -->
+	<path id="project.class.path">
+		<pathelement location="${classes}" />
+		<fileset dir="${jade_lib}">
+			<include name="**/*.jar" />
+		</fileset>
+	</path>
+
+
+	<target name="00_RMA"> 	<!-- launch main container -->
+		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
+			<arg value="-gui" />
+		</java>
+	</target>
+	
+	<target name="01_HelloAgent">	<!-- create Hello Agent -->
+		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
+			<arg value="-container" /> 
+			<arg value="fred:concurrentSystems.HelloAgent()" />
+		</java>
+	</target>
+
+</project> 
