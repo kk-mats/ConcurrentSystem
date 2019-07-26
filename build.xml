@@ -32,4 +32,20 @@
 			<arg value="ping:concurrentSystems.Ping()" />
 		</java>
 	</target>
+
+
+	<target name="TemplateAgent1">	<!-- create Hello Agent -->
+		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
+			<arg value="-container" />
+			<arg value="a1:concurrentSystems.Responder();a2:concurrentSystems.Responder()" />
+		</java>
+	</target>
+
+
+	<target name="TemplateAgent2">	<!-- create Hello Agent -->
+		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
+			<arg value="-container" />
+			<arg value="template:concurrentSystems.Template()" />
+		</java>
+	</target>
 </project>
