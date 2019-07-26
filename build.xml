@@ -21,28 +21,15 @@
 	<target name="01_HelloAgent">	<!-- create Hello Agent -->
 		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
 			<arg value="-container" />
-			<arg value="fred:concurrentSystems.HelloAgent()" />
+			<arg value="pong1:concurrentSystems.Pong();pong2:concurrentSystems.Pong();john:concurrentSystems.AMSDump()" />
 		</java>
 	</target>
 
-	<target name="MyAgent">	<!-- create Hello Agent -->
-		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
-			<arg value="-container" />
-			<arg value="ddd:concurrentSystems.MyAgent()" />
-		</java>
-	</target>
 
-	<target name="Agent1">	<!-- create Hello Agent -->
+	<target name="PPP">	<!-- create Hello Agent -->
 		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
 			<arg value="-container" />
-			<arg value="jjj:concurrentSystems.Agent1()" />
-		</java>
-	</target>
-
-	<target name="Agent3">	<!-- create Hello Agent -->
-		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
-			<arg value="-container" />
-			<arg value="333:concurrentSystems.Agent3()" />
+			<arg value="ping:concurrentSystems.Ping()" />
 		</java>
 	</target>
 </project>
