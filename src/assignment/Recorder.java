@@ -22,7 +22,7 @@ public class Recorder
 
 	synchronized public static void dump()
 	{
-		Recorder.buffer.stream().forEach(System.out::println);
+		//Recorder.buffer.stream().forEach(System.out::println);
 	}
 
 	private static void record(final String line)

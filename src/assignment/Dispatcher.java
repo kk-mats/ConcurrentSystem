@@ -2,22 +2,29 @@ package assignment;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Random;
 import java.util.stream.Collectors;
 
+import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.SimpleBehaviour;
 import jade.core.behaviours.CyclicBehaviour;
 import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
 import jade.domain.FIPAAgentManagement.AMSAgentDescription;
 import jade.domain.FIPAAgentManagement.SearchConstraints;
 import jade.domain.AMSService;
 
 public class Dispatcher extends Agent
 {
-	class StandbyBehaviour extends SimpleBehaviour
+	class Behaviour extends SimpleBehaviour
 	{
-		public StandbyBehaviour()
+		private DispatcherState state=DispatcherState.ready_to_dispatch;
+		private MessageTemplate dispatchingFilter;
+
+		public Behaviour()
 		{
 			super(Dispatcher.this);
 		}
@@ -25,28 +32,41 @@ public class Dispatcher extends Agent
 		@Override
 		public void action()
 		{
-			Dispatcher.this.generatePayload();
-			ACLMessage msg=this.myAgent.receive();
-
-			if(msg==null)
+			switch(this.state)
 			{
-				return;
-			}
+				case ready_to_dispatch:
+				{
+					ACLMessage msg=this.myAgent.receive();
+					if(msg==null)
+					{
+						return;
+					}
 
-			ACLMessage reply=msg.createReply();
-			if(msg.getPerformative()==ACLMessage.REQUEST && Dispatcher.this.state==State.standby && !Dispatcher.this.buffer.isEmpty())
-			{
-				reply.setPerformative(ACLMessage.AGREE);
-				final Payload payload=Dispatcher.this.startLoading(msg);
-				reply.setContent(payload.toString());
-				this.myAgent.send(reply);
-				this.block(payload.weight);
-				return;
-			}
+					if(msg.getPerformative()==ACLMessage.REQUEST && !Dispatcher.this.buffer.isEmpty())
+					{
+						this.state=DispatcherState.dispatching;
+						this.dispatchingFilter=MessageTemplate.and(
+							MessageTemplate.MatchSender(msg.getSender()),
+							MessageTemplate.MatchPerformative(ACLMessage.CONFIRM)
+						);
 
-			reply.setPerformative(ACLMessage.REFUSE);
-			reply.setContent(this.myAgent.getLocalName()+" is unavailable.");
-			this.myAgent.send(msg);
+						ACLMessage reply=msg.createReply();
+						reply.setPerformative(ACLMessage.AGREE);
+						reply.setContent(Dispatcher.this.buffer.peekFirst().toString());
+						this.myAgent.send(reply);
+						Recorder.println(this.myAgent.getLocalName()+" starts dispatching ["+Dispatcher.this.buffer.peekFirst().toString()+"] to "+msg.getSender().getLocalName());
+					}
+					return;
+				}
+
+				case dispatching:
+				{
+					ACLMessage msg=this.myAgent.blockingReceive(this.dispatchingFilter);
+					Recorder.println(this.myAgent.getLocalName()+" finishes dispatching ["+Dispatcher.this.buffer.peekFirst().toString()+"] to "+msg.getSender().getLocalName());
+					this.state=DispatcherState.ready_to_dispatch;
+					Dispatcher.this.dispatched.add(Dispatcher.this.buffer.pollFirst());
+				}
+			}
 		}
 
 		@Override
@@ -54,79 +74,29 @@ public class Dispatcher extends Agent
 		{
 			return Dispatcher.this.readyToDelete();
 		}
-		
-		@Override
-		public void restart()
-		{
-			Dispatcher.this.finishLoading();
-		}
 	}
 
-	class BusyBehaviour extends CyclicBehaviour
-	{
-		public BusyBehaviour()
-		{
-			super(Dispatcher.this);
-		}
-
-		@Override
-		public void action()
-		{
-			ACLMessage msg=this.myAgent.receive();
-
-			if(msg==null)
-			{
-				return;
-			}
-
-			ACLMessage reply=msg.createReply();
-			reply.setPerformative(ACLMessage.REFUSE);
-			reply.setContent(this.myAgent.getLocalName()+" is busy.");
-			this.myAgent.send(reply);
-		}
-	}
-
-	public static final String exitMessage="Dispatcher exit";
 	private int restOfPayload=20;
 	private ArrayDeque<Payload> buffer=new ArrayDeque<Payload>();
 	private ArrayList<Payload> dispatched=new ArrayList<Payload>();
-	private State state=State.standby;
 	private Random random=new Random();
-	private BusyBehaviour busyBehaviour=new BusyBehaviour();
 
 	@Override
 	protected void setup()
 	{
-		this.addBehaviour(new StandbyBehaviour());
+		this.addBehaviour(new Behaviour());
+		this.generatePayload();
 		Recorder.println(this.getLocalName()+" has started.");
 	}
 
 	private void generatePayload()
 	{
-		if(this.buffer.size()>=this.restOfPayload || this.random.nextInt(10)>1)
+		for(int i=0; i<this.restOfPayload; ++i)
 		{
-			return;
+			this.buffer.push(new Payload(random.nextInt(3), random.nextInt(3000)+1000));
 		}
-
-		this.buffer.push(new Payload(random.nextInt(3), random.nextInt(3000)+1000));
 	}
 
-	private Payload startLoading(final ACLMessage msg)
-	{
-		Dispatcher.this.state=State.busy;
-		this.addBehaviour(this.busyBehaviour);
-		this.dispatched.add(this.buffer.peekFirst());
-		Recorder.println(this.getLocalName()+" starts loading ["+this.buffer.peekFirst().toString()+"] to "+msg.getSender().getLocalName());
-		return this.buffer.peekFirst();
-	}
-
-	private void finishLoading()
-	{
-		Recorder.println(this.getLocalName()+" finishes loading ["+this.buffer.pollFirst().toString()+"]");
-		this.removeBehaviour(this.busyBehaviour);
-		this.state=State.standby;
-		--this.restOfPayload;
-	}
 
 	private boolean readyToDelete()
 	{
@@ -136,7 +106,6 @@ public class Dispatcher extends Agent
 		}
 
 		ACLMessage template=new ACLMessage(ACLMessage.INFORM);
-		template.setContent(Dispatcher.exitMessage);
 		SearchConstraints c=new SearchConstraints();
 		c.setMaxResults(new Long(-1));
 		try
@@ -149,11 +118,12 @@ public class Dispatcher extends Agent
 					ACLMessage msg=template;
 					msg.addReceiver(agent.getName());
 					this.send(msg);
+					System.out.println("send exit to "+agent.getName().getLocalName());
 
 					while(true)
 					{
 						ACLMessage reply=this.receive();
-						if(reply!=null && reply.getPerformative()==ACLMessage.CONFIRM)
+						if(reply!=null && reply.getPerformative()==ACLMessage.ACCEPT_PROPOSAL)
 						{
 							break;
 						}

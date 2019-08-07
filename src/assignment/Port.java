@@ -6,14 +6,19 @@ import java.util.stream.Collectors;
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.SimpleBehaviour;
-import jade.core.behaviours.CyclicBehaviour;
 import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
 
 public class Port extends Agent
 {
-	class StandbyBehaviour extends SimpleBehaviour
+	class Behaviour extends SimpleBehaviour
 	{
-		public StandbyBehaviour()
+		private boolean exitReceived=false;
+		private PortState state=PortState.ready_to_receive;
+		private MessageTemplate recevingFilter;
+		private MessageTemplate exitFilter;
+
+		public Behaviour()
 		{
 			super(Port.this);
 		}
@@ -21,115 +26,85 @@ public class Port extends Agent
 		@Override
 		public void action()
 		{
-			ACLMessage msg=this.myAgent.receive();
-			if(msg==null)
+			switch(this.state)
 			{
-				return;
-			}
+				case ready_to_receive:
+				{
+					ACLMessage msg=this.myAgent.receive();
+					if(msg==null)
+					{
+						return;
+					}
 
-			ACLMessage reply=msg.createReply();
-			if(msg.getPerformative()==ACLMessage.REQUEST && Port.this.state==State.standby)
-			{
-				reply.setPerformative(ACLMessage.AGREE);
-				reply.setContent(this.myAgent.getLocalName()+" is available.");
-				this.myAgent.send(reply);
-				this.block(Port.this.startUnloading(msg));
-				return;
-			}
-			else if(msg.getPerformative()==ACLMessage.INFORM)
-			{
-				Port.this.exitReceived=true;
-				return;
-			}
+					if(msg.getPerformative()==ACLMessage.REQUEST)
+					{
+						this.state=PortState.receiving;
+						this.recevingFilter=MessageTemplate.and(
+							MessageTemplate.MatchSender(msg.getSender()),
+							MessageTemplate.MatchPerformative(ACLMessage.CONFIRM)
+						);
+						this.exitFilter=MessageTemplate.and(
+							MessageTemplate.MatchSender(new AID("Dispatcher", AID.ISLOCALNAME)),
+							MessageTemplate.MatchPerformative(ACLMessage.INFORM)
+						);
 
-			reply.setPerformative(ACLMessage.REFUSE);
-			reply.setContent(this.myAgent.getLocalName()+" is unavailable.");
-			this.myAgent.send(reply);
+						ACLMessage reply=msg.createReply();
+						reply.setPerformative(ACLMessage.AGREE);
+						this.myAgent.send(reply);
+						Port.this.buffer.add(Payload.fromString(msg.getContent()));
+						Recorder.println(this.myAgent.getLocalName()+" starts receiving ["+msg.getContent()+"] from "+msg.getSender().getLocalName());
+						return;
+					}
+					this.exitReceived=msg.getPerformative()==ACLMessage.INFORM;
+					return;
+				}
+
+				case receiving:
+				{
+					ACLMessage msg=this.myAgent.blockingReceive(MessageTemplate.or(this.recevingFilter, this.exitFilter), Port.this.buffer.get(Port.this.buffer.size()-1).weight);
+
+					if(msg==null)
+					{
+						msg=this.myAgent.blockingReceive(MessageTemplate.or(this.recevingFilter, this.exitFilter));
+					}
+
+					if(msg.getPerformative()==ACLMessage.CONFIRM)
+					{
+						Recorder.println(this.myAgent.getLocalName()+" finishes receiving ["+Port.this.buffer.get(Port.this.buffer.size()-1).toString()+"] from "+msg.getSender().getLocalName());
+					}
+					else if(msg.getPerformative()==ACLMessage.INFORM)
+					{
+						this.myAgent.blockingReceive(this.recevingFilter);
+						this.exitReceived=true;
+					}
+					this.state=PortState.ready_to_receive;
+					return;
+				}
+			}
 		}
 
 		@Override
 		public boolean done()
 		{
-			if(Port.this.exitReceived)
+			if(this.state==PortState.ready_to_receive && this.exitReceived)
 			{
-				ACLMessage msg=new ACLMessage(ACLMessage.CONFIRM);
+				ACLMessage msg=new ACLMessage(ACLMessage.ACCEPT_PROPOSAL);
 				msg.addReceiver(new AID("Dispatcher", AID.ISLOCALNAME));
-				Port.this.send(msg);
-
-				Port.this.doDelete();
+				this.myAgent.send(msg);
+				this.myAgent.doDelete();
 				return true;
 			}
 			return false;
 		}
-
-		@Override
-		public void restart()
-		{
-			Port.this.finishUnloading();
-		}
-	};
-
-	class BusyBehaviour extends CyclicBehaviour
-	{
-		public BusyBehaviour()
-		{
-			super(Port.this);
-		}
-
-		@Override
-		public void action()
-		{
-			ACLMessage msg=this.myAgent.receive();
-
-			if(msg==null)
-			{
-				return;
-			}
-
-			if(msg.getPerformative()==ACLMessage.INFORM)
-			{
-				Port.this.exitReceived=true;
-				return;
-			}
-
-			ACLMessage reply=msg.createReply();
-			reply.setPerformative(ACLMessage.REFUSE);
-			reply.setContent(this.myAgent.getLocalName()+" is busy.");
-
-			this.myAgent.send(reply);
-		}
 	}
 
-	private State state=State.standby;
 	private ArrayList<Payload> buffer=new ArrayList<Payload>();
-	private BusyBehaviour busyBehaviour=new BusyBehaviour();
-	private boolean exitReceived=false;
 
 	@Override
 	protected void setup()
 	{
-		this.addBehaviour(new StandbyBehaviour());
+		this.addBehaviour(new Behaviour());
 		Recorder.println(this.getLocalName()+" has started.");
-	}
-
-	private int startUnloading(final ACLMessage msg)
-	{
-		this.state=State.busy;
-		Payload p=Payload.fromString(msg.getContent());
-		this.buffer.add(p);
-		this.addBehaviour(this.busyBehaviour);
-		Recorder.println(this.getLocalName()+" starts unloading ["+p.toString()+"] from "+msg.getSender().getLocalName());
-		return p.weight;
-	}
-
-	private void finishUnloading()
-	{
-		if(this.buffer.size()>0)
-		{
-			Recorder.println(this.getLocalName()+" finishes unloading ["+this.buffer.get(this.buffer.size()-1).toString()+"]");
-			this.removeBehaviour(this.busyBehaviour);
-			this.state=State.standby;
-		}
 	}
 
 	@Override
