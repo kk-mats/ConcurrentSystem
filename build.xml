@@ -18,34 +18,11 @@
 		</java>
 	</target>
 
-	<target name="01_HelloAgent">	<!-- create Hello Agent -->
+	<target name="sorter">	<!-- create Hello Agent -->
 		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
 			<arg value="-container" />
-			<arg value="pong1:concurrentSystems.Pong();pong2:concurrentSystems.Pong();john:concurrentSystems.AMSDump()" />
+			<arg value="Dispatcher:assignment.Dispatcher();Carrier0:assignment.Carrier();Carrier1:assignment.Carrier();Carrier2:assignment.Carrier();Port0:assignment.Port();Port1:assignment.Port();Port2:assignment.Port()" />
 		</java>
 	</target>
 
-
-	<target name="PPP">	<!-- create Hello Agent -->
-		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
-			<arg value="-container" />
-			<arg value="ping:concurrentSystems.Ping()" />
-		</java>
-	</target>
-
-
-	<target name="TemplateAgent1">	<!-- create Hello Agent -->
-		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
-			<arg value="-container" />
-			<arg value="a1:concurrentSystems.Responder();a2:concurrentSystems.Responder()" />
-		</java>
-	</target>
-
-
-	<target name="TemplateAgent2">	<!-- create Hello Agent -->
-		<java classname="jade.Boot" classpathref="project.class.path" fork="true">
-			<arg value="-container" />
-			<arg value="template:concurrentSystems.Template()" />
-		</java>
-	</target>
 </project>
